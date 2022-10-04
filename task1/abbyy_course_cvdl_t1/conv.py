@@ -17,12 +17,21 @@ class ConvLayer(BaseLayer):
      результат .forward(input) должен всегда иметь [H, W] размерность, равную
      размерности input.
     """
+
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
-        assert(in_channels > 0)
-        assert(out_channels > 0)
-        assert(kernel_size % 2 == 1)
+        assert (in_channels > 0)
+        assert (out_channels > 0)
+        assert (kernel_size % 2 == 1)
         super().__init__()
-        raise NotImplementedError()
+        limit = np.sqrt(6 / (in_channels + out_channels))
+        self.parameters.append(np.random.uniform(-limit, limit, size=(
+            out_channels, in_channels, kernel_size, kernel_size)))
+        self.parameters.append(np.zeros(out_channels))
+        self.parameters_grads.append(
+            np.zeros((out_channels, in_channels, kernel_size, kernel_size)))
+        self.parameters_grads.append(np.zeros(out_channels))
+        self.padding = self.kernel_size // 2
+        self.pad_input = None
 
     @property
     def kernel_size(self):
@@ -43,7 +52,10 @@ class ConvLayer(BaseLayer):
         Метод не проверяется в тестах -- можно релизовать слой без
         использования этого метода.
         """
-        pass
+        pad_width = [[0, 0]] * len(tensor.shape)
+        for i in axis:
+            pad_width[i] = [one_side_pad, one_side_pad]
+        return np.pad(tensor, pad_width, constant_values=0)
 
     @staticmethod
     def _cross_correlate(input, kernel):
@@ -58,7 +70,30 @@ class ConvLayer(BaseLayer):
         pass
 
     def forward(self, input: np.ndarray) -> np.ndarray:
-        raise NotImplementedError()
+        B, C, H, W = input.shape
+        self.pad_input = self._pad_zeros(input, self.padding)
+        result = np.zeros((B, self.out_channels, H, W))
 
-    def backward(self, output_grad: np.ndarray)->np.ndarray:
-        raise NotImplementedError()
+        for i in range(H):
+            for j in range(W):
+                cur_window = self.pad_input[:, None, :, i:(i + self.kernel_size), j:(j + self.kernel_size)]
+                result[:, :, i, j] = (cur_window * self.parameters[0]).sum((2, 3, 4)) + self.parameters[1]
+        return result
+
+    def backward(self, output_grad: np.ndarray) -> np.ndarray:
+        B, _, H, W = output_grad.shape
+        grad_input = np.zeros_like(self.pad_input)
+        self.parameters_grads[0] = np.zeros_like(self.parameters[0])
+        self.parameters_grads[1] = np.zeros_like(self.parameters[1])
+
+        for channel in range(self.out_channels):
+            for h in range(H):
+                h_end = h + self.kernel_size
+                for w in range(W):
+                    w_end = w + self.kernel_size
+                    cur_grad = output_grad[:, channel, h, w][:, None, None, None]
+                    self.parameters_grads[0][channel] += (cur_grad * self.pad_input[:, :, h:h_end, w:w_end]).sum(axis=0)
+                    grad_input[:, :, h:h_end, w:w_end] += (cur_grad * self.parameters[0][channel])
+            self.parameters_grads[1][channel] += output_grad[:, channel].sum()
+
+        return grad_input[:, :, self.padding:-self.padding, self.padding:-self.padding]

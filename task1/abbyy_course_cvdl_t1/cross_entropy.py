@@ -8,9 +8,11 @@ class CrossEntropyLoss(BaseLayer):
     N классов.
     Применяет softmax к входным данных.
     """
+
     def __init__(self):
         super().__init__()
-        raise NotImplementedError()
+        self.pred = None
+        self.target = None
 
     def forward(self, pred: np.ndarray, target: np.ndarray) -> np.ndarray:
         """
@@ -26,11 +28,17 @@ class CrossEntropyLoss(BaseLayer):
         P[B, c] = exp(pred[B, c]) / Sum[c](exp(pred[B, c])
         Loss[B] = - Sum[c]log( prob[B, C] * target[B, C]) ) = -log(prob[B, C_correct])
         """
-        raise NotImplementedError()
+        self.pred = pred
+        self.target = target
+        prob = np.exp(pred - pred.max(axis=1, keepdims=True))
+        prob = prob / prob.sum(axis=1, keepdims=True)
+        return -np.log((prob * target).sum(axis=1))
 
     def backward(self) -> np.ndarray:
         """
         Возвращает градиент лосса по pred, т.е. первому аргументу .forward
         Не принимает никакого градиента по определению.
         """
-        raise NotImplementedError()
+        prob = np.exp(self.pred - self.pred.max(axis=1, keepdims=True))
+        prob = prob / prob.sum(axis=1, keepdims=True)
+        return prob - self.target
