@@ -9,11 +9,11 @@ class ReluLayer(BaseLayer):
     """
     def __init__(self):
         super().__init__()
-        raise NotImplementedError()
+        self.input = None
 
     def forward(self, input: np.ndarray) -> np.ndarray:
-        raise NotImplementedError()
+        self.input = input
+        return np.maximum(input, np.zeros_like(input))
 
     def backward(self, output_grad: np.ndarray) -> np.ndarray:
-        raise NotImplementedError()
-
+        return output_grad * np.where(self.input > 0, np.ones_like(self.input), np.zeros_like(self.input))
