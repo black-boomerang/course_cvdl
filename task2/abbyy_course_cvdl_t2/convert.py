@@ -114,7 +114,7 @@ class ObjectsToPoints(nn.Module):
         batch_size, objects_per_image, d6 = objects.shape
         batch_idx = torch.repeat_interleave(torch.arange(batch_size), objects_per_image)
         y_idx, x_idx = objects[:, :, 0], objects[:, :, 1]
-        return batch_idx.long(), y_idx.long().flatten(), x_idx.long().flatten()
+        return batch_idx.long(), y_idx.flatten().long(), x_idx.flatten().long()
 
     @classmethod
     def compute_objects_offsets(cls, objects: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
