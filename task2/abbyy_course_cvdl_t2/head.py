@@ -1,6 +1,7 @@
 """ Здесь находится 'Голова' CenterNet, описана в разделе 4 статьи https://arxiv.org/pdf/1904.07850.pdf"""
-from torch import nn
 import torch
+from torch import nn
+from torch.nn import functional as F
 
 
 class CenterNetHead(nn.Module):
@@ -17,12 +18,19 @@ class CenterNetHead(nn.Module):
     - еще 2 канала: offset[B, 2, W/R, H/R] - поправки координат в пикселях от 0 до 1
     - еще 2 канала: sizes[B, 2, W/R, H/R] - размеры объекта в пикселях
     """
+
     def __init__(self, k_in_channels=64, c_classes: int = 2):
         super().__init__()
         self.c_classes = c_classes
-        raise NotImplementedError()
-
+        self.conv1 = nn.Conv2d(k_in_channels, k_in_channels, kernel_size=3, padding=1)
+        self.act = nn.ReLU()
+        self.conv_cls = nn.Conv2d(k_in_channels, c_classes, kernel_size=1, padding=0)
+        self.conv_off = nn.Conv2d(k_in_channels, 2, kernel_size=1, padding=0)
+        self.conv_size = nn.Conv2d(k_in_channels, 2, kernel_size=1, padding=0)
 
     def forward(self, input_t: torch.Tensor):
-        raise NotImplementedError()
+        x = self.act(self.conv1(input_t))
+        class_heatmap = torch.sigmoid(self.conv_cls(x))
+        offset_map = torch.sigmoid(self.conv_off(x))
+        size_map = self.conv_size(x)
         return torch.cat([class_heatmap, offset_map, size_map], dim=1)

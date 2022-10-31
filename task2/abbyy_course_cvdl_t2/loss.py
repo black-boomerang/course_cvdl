@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
+
 from abbyy_course_cvdl_t2.convert import ObjectsToPoints
 
 
@@ -42,7 +42,7 @@ class CenterNetLoss(nn.Module):
         pred_probs = pred_heatmaps[:, :num_classes]
 
         # создаем маску, какие объекты являются реальными детекциями, а какие "фальшивыми" со значениями 0
-        is_real_object = (target_probs.sum(axis=1, keepdims=True)>=1.0).byte()
+        is_real_object = (target_probs.sum(axis=1, keepdims=True) >= 1.0).byte()
         num_real_objects = is_real_object.sum(axis=(1, 2, 3))
 
         # считаем лоссы
@@ -55,14 +55,19 @@ class CenterNetLoss(nn.Module):
         pred_sizes = pred_heatmaps[:, -2:]
         target_sizes = target_heatmaps[:, -2:]
         lsize = self.loss_l1(pred_sizes, target_sizes, is_real_object) / (num_real_objects + 1)
-        return torch.stack([lk, self.l_offset_lambda * loff, lsize * self.l_size_lambda ], axis=-1)
+        return torch.stack([lk, self.l_offset_lambda * loff, lsize * self.l_size_lambda], dim=-1)
 
     def loss_fl(self, predict_cyx, target_cyx, alpha=2, beta=4):
         """
         Focal loss между двумя heatmap. В статье параметры FL alpha=2, beta=4.
         """
-        raise NotImplementedError()
-
+        mask = (target_cyx == 1).long()
+        x = predict_cyx.clip(1e-6, 1.0 - 1e-6)
+        loss_1 = x.log() * ((1.0 - x) ** alpha)
+        loss_2 = (1.0 - x).log() * ((1.0 - x) ** beta) * (x ** alpha)
+        loss = loss_1 * mask + loss_2 * (1 - mask)
+        assert not loss.isnan().any(), torch.where(loss.isnan())
+        return -loss.sum(dim=(1, 2, 3))
 
     def loss_l1(self, predict, target, is_real_object):
         """
@@ -71,5 +76,5 @@ class CenterNetLoss(nn.Module):
         (т.к. их для всех изображений генерируется по N, а детекций может быть меньше),
         и для объектов с is_real_object=False следует считать лосс как 0.
         """
-        raise NotImplementedError()
-        return loss
+        loss = torch.abs(predict - target) * is_real_object.long()
+        return loss.sum(dim=(1, 2, 3))

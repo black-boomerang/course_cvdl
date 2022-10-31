@@ -1,8 +1,10 @@
-from torch import nn
 import torch
-from abbyy_course_cvdl_t2.head import CenterNetHead
+from torch import nn
+from torch.nn import functional as F
+
 from abbyy_course_cvdl_t2.backbone import ResnetBackbone
 from abbyy_course_cvdl_t2.convert import PointsToObjects
+from abbyy_course_cvdl_t2.head import CenterNetHead
 
 
 class PointsNonMaxSuppression(nn.Module):
@@ -10,12 +12,15 @@ class PointsNonMaxSuppression(nn.Module):
     Описан в From points to bounding boxes, фильтрует находящиеся
     рядом объекты.
     """
+
     def __init__(self, kernel_size: int = 3):
         super().__init__()
         self.kernel_size = kernel_size
 
     def forward(self, points):
-        raise NotImplementedError()
+        max_conf = points[:, :-4].max(dim=1)[0]
+        max_points = F.max_pool2d(max_conf, kernel_size=self.kernel_size, stride=1, padding=self.kernel_size // 2)
+        points[(max_conf != max_points).unsqueeze(1).repeat(1, points.shape[1], 1, 1)] = 0
         return points
 
 
@@ -27,6 +32,7 @@ class ScaleObjects(nn.Module):
     имеют меньший размер.
     Чтобы это компенисровать, надо увеличить размеры объектов.
     """
+
     def __init__(self, scale: int = 4):
         super().__init__()
         self.scale = scale
@@ -41,6 +47,7 @@ class CenterNet(nn.Module):
     """
     Детектор объектов из статьи 'Objects as Points': https://arxiv.org/pdf/1904.07850.pdf
     """
+
     def __init__(self, pretrained=True, head_kwargs={}, nms_kwargs={}, points_to_objects_kwargs={}):
         super().__init__()
         self.backbone = ResnetBackbone(pretrained)
